@@ -117,6 +117,115 @@ local function lib_exists(paths, ext)
         or vim.uv.fs_stat(paths.release_dir .. "/" .. lib_name)
 end
 
+local function get_version_file(paths)
+    return paths.data_dir .. "/.version"
+end
+
+local function read_local_version(paths)
+    local version_file = get_version_file(paths)
+    local f = io.open(version_file, "r")
+    if f then
+        local version = f:read("*l")
+        f:close()
+        return version
+    end
+    return nil
+end
+
+local function write_local_version(paths, version)
+    local version_file = get_version_file(paths)
+    local f = io.open(version_file, "w")
+    if f then
+        f:write(version)
+        f:close()
+    end
+end
+
+local function check_for_updates(paths)
+    local local_version = read_local_version(paths)
+    if not local_version then return end
+
+    local releases_url = "https://api.github.com/repos/" .. GITHUB_REPO .. "/releases/latest"
+    vim.system({ "curl", "-sL", releases_url }, { text = true }, function(result)
+        if result.code ~= 0 then return end
+
+        local ok, release = pcall(vim.json.decode, result.stdout)
+        if not ok or not release or not release.tag_name then return end
+
+        if release.tag_name ~= local_version then
+            vim.schedule(function()
+                vim.notify(
+                    string.format("difftastic-nvim: Update available (%s -> %s). Run :DifftUpdate", local_version, release.tag_name),
+                    vim.log.levels.INFO
+                )
+            end)
+        end
+    end)
+end
+
+local function download_binary(paths, platform, ext, on_complete)
+    build_state = "downloading"
+    vim.notify("difftastic-nvim: Downloading binary...", vim.log.levels.INFO)
+
+    vim.fn.mkdir(paths.data_dir, "p")
+    local releases_url = "https://api.github.com/repos/" .. GITHUB_REPO .. "/releases/latest"
+
+    vim.system({ "curl", "-sL", releases_url }, { text = true }, function(result)
+        if result.code ~= 0 then
+            vim.schedule(function()
+                build_state = "failed"
+                vim.notify("difftastic-nvim: Failed to fetch release info", vim.log.levels.ERROR)
+                if on_complete then on_complete(false) end
+            end)
+            return
+        end
+
+        local ok, release = pcall(vim.json.decode, result.stdout)
+        if not ok or not release or not release.assets then
+            vim.schedule(function()
+                build_state = "failed"
+                vim.notify("difftastic-nvim: No release found", vim.log.levels.ERROR)
+                if on_complete then on_complete(false) end
+            end)
+            return
+        end
+
+        local asset_name = platform .. ext
+        local download_url = nil
+        for _, asset in ipairs(release.assets) do
+            if asset.name == asset_name then
+                download_url = asset.browser_download_url
+                break
+            end
+        end
+
+        if not download_url then
+            vim.schedule(function()
+                build_state = "failed"
+                vim.notify("difftastic-nvim: No binary for " .. platform, vim.log.levels.ERROR)
+                if on_complete then on_complete(false) end
+            end)
+            return
+        end
+
+        local dest_file = paths.data_dir .. "/" .. get_lib_name(ext)
+        vim.system({ "curl", "-sL", "-o", dest_file, download_url }, {}, function(dl_result)
+            vim.schedule(function()
+                if dl_result.code == 0 then
+                    write_local_version(paths, release.tag_name)
+                    build_state = "ready"
+                    vim.notify("difftastic-nvim: Downloaded " .. release.tag_name, vim.log.levels.INFO)
+                    if on_complete then on_complete(true) end
+                else
+                    build_state = "failed"
+                    vim.notify("difftastic-nvim: Download failed", vim.log.levels.ERROR)
+                    if on_complete then on_complete(false) end
+                end
+            end)
+        end)
+    end)
+end
+
 local function ensure_lib_exists()
     local platform, ext = get_platform()
     local paths = get_lib_paths()
@@ -124,65 +233,16 @@ local function ensure_lib_exists()
     -- Already have a binary?
     if lib_exists(paths, ext) then
         build_state = "ready"
+        -- Check for updates in background if download is enabled
+        if M.config.download then
+            check_for_updates(paths)
+        end
         return
     end
 
     -- Try auto-download (async)
     if M.config.download and platform then
-        build_state = "downloading"
-        vim.notify("difftastic-nvim: Downloading binary...", vim.log.levels.INFO)
-
-        vim.fn.mkdir(paths.data_dir, "p")
-        local releases_url = "https://api.github.com/repos/" .. GITHUB_REPO .. "/releases/latest"
-
-        vim.system({ "curl", "-sL", releases_url }, { text = true }, function(result)
-            if result.code ~= 0 then
-                vim.schedule(function()
-                    build_state = "failed"
-                    vim.notify("difftastic-nvim: Failed to fetch release info", vim.log.levels.ERROR)
-                end)
-                return
-            end
-
-            local ok, release = pcall(vim.json.decode, result.stdout)
-            if not ok or not release or not release.assets then
-                vim.schedule(function()
-                    build_state = "failed"
-                    vim.notify("difftastic-nvim: No release found", vim.log.levels.ERROR)
-                end)
-                return
-            end
-
-            local asset_name = platform .. ext
-            local download_url = nil
-            for _, asset in ipairs(release.assets) do
-                if asset.name == asset_name then
-                    download_url = asset.browser_download_url
-                    break
-                end
-            end
-
-            if not download_url then
-                vim.schedule(function()
-                    build_state = "failed"
-                    vim.notify("difftastic-nvim: No binary for " .. platform, vim.log.levels.ERROR)
-                end)
-                return
-            end
-
-            local dest_file = paths.data_dir .. "/" .. get_lib_name(ext)
-            vim.system({ "curl", "-sL", "-o", dest_file, download_url }, {}, function(dl_result)
-                vim.schedule(function()
-                    if dl_result.code == 0 then
-                        build_state = "ready"
-                        vim.notify("difftastic-nvim: Download complete", vim.log.levels.INFO)
-                    else
-                        build_state = "failed"
-                        vim.notify("difftastic-nvim: Download failed", vim.log.levels.ERROR)
-                    end
-                end)
-            end)
-        end)
+        download_binary(paths, platform, ext)
         return
     end
 
@@ -351,5 +411,27 @@ end
 
 function M.next_hunk() diff.next_hunk(M.state) end
 function M.prev_hunk() diff.prev_hunk(M.state) end
+
+function M.update()
+    local platform, ext = get_platform()
+    if not platform then
+        vim.notify("difftastic-nvim: Unsupported platform", vim.log.levels.ERROR)
+        return
+    end
+
+    local paths = get_lib_paths()
+
+    -- Remove old binary and symlink to force re-download
+    local lib_path = paths.data_dir .. "/" .. get_lib_name(ext)
+    local so_path = paths.data_dir .. "/difftastic_nvim.so"
+    vim.uv.fs_unlink(lib_path)
+    vim.uv.fs_unlink(so_path)
+
+    -- Clear cached library so it reloads
+    package.loaded["difftastic_nvim"] = nil
+    difftastic_nvim = nil
+
+    download_binary(paths, platform, ext)
+end
 
 return M

@@ -1,5 +1,6 @@
 :Difft	difftastic-nvim.txt	/*:Difft*
 :DifftClose	difftastic-nvim.txt	/*:DifftClose*
+:DifftUpdate	difftastic-nvim.txt	/*:DifftUpdate*
 difftastic-nvim-commands	difftastic-nvim.txt	/*difftastic-nvim-commands*
 difftastic-nvim-configuration	difftastic-nvim.txt	/*difftastic-nvim-configuration*
 difftastic-nvim-contents	difftastic-nvim.txt	/*difftastic-nvim-contents*

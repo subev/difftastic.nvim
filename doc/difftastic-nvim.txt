@@ -88,6 +88,11 @@ Downloaded binaries are stored in: >
 :DifftClose
     Close the diff view.
 
+                                                                  *:DifftUpdate*
+:DifftUpdate
+    Update the binary to the latest release. Only available when using
+    auto-download (`download = true`).
+
 ==============================================================================
 5. KEYBINDINGS                                     *difftastic-nvim-keybindings*
 
@@ -145,7 +150,12 @@ All options are optional. Only specify what you want to override.
 download ~
     When true, automatically downloads a pre-built binary for your platform
     from GitHub releases if no local build is found. Binaries are cached in
-    `vim.fn.stdpath("data") .. "/difftastic-nvim"`. Default: false
+    `vim.fn.stdpath("data") .. "/difftastic-nvim"`.
+
+    When enabled, the plugin also checks for updates on startup and notifies
+    you if a newer version is available. Use |:DifftUpdate| to update.
+
+    Default: false
 
                                                         *difftastic-nvim-keymaps*
 Keymap options:

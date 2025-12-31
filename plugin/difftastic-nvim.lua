@@ -23,3 +23,9 @@ vim.api.nvim_create_user_command("DifftClose", function()
 end, {
     desc = "Close difftastic diff view",
 })
+
+vim.api.nvim_create_user_command("DifftUpdate", function()
+    require("difftastic-nvim").update()
+end, {
+    desc = "Update difftastic-nvim binary to latest release",
+})
