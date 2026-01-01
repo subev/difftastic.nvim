@@ -153,22 +153,8 @@ require("difftastic-nvim").setup({
         },
     },
     highlights = {
-        -- Treesitter mode (background colors)
-        DifftAdded = { bg = "#2d4a3e" },
-        DifftRemoved = { bg = "#4a2d2d" },
-        DifftAddedInline = { bg = "#3d6a4e" },
-        DifftRemovedInline = { bg = "#6a3d3d" },
-        -- Difftastic mode (foreground colors)
-        DifftAddedFg = { fg = "#9ece6a" },
-        DifftRemovedFg = { fg = "#f7768e" },
-        DifftAddedInlineFg = { fg = "#9ece6a", bold = true },
-        DifftRemovedInlineFg = { fg = "#f7768e", bold = true },
-        -- Shared
-        DifftFiller = { fg = "#3b4261" },
-        DifftFileAdded = { fg = "#9ece6a" },
-        DifftFileDeleted = { fg = "#f7768e" },
-        DifftTreeCurrent = { bg = "#3b4261", bold = true },
-        DifftDirectory = { fg = "#7aa2f7", bold = true },
+        -- Override any highlight group (see Highlight Groups below)
+        -- DifftAdded = { bg = "#2d4a3e" },
     },
 })
 ```
@@ -184,33 +170,38 @@ The `highlight_mode` option controls how syntax highlighting is applied:
 
 ## Highlight Groups
 
+Highlights automatically inherit from your colorscheme's semantic groups (`Added`, `Removed`, `Directory`, `Normal`) and update when you switch themes. Background colors are derived by blending the foreground color with your `Normal` background at 25% opacity.
+
 **Treesitter mode** (background colors):
 
-| Group | Description |
-|-------|-------------|
-| `DifftAdded` | Added lines background |
-| `DifftRemoved` | Removed lines background |
-| `DifftAddedInline` | Inline added text |
-| `DifftRemovedInline` | Inline removed text |
+| Group | Default | Description |
+|-------|---------|-------------|
+| `DifftAdded` | Derived from `Added` | Added lines background |
+| `DifftRemoved` | Derived from `Removed` | Removed lines background |
 
 **Difftastic mode** (foreground colors):
 
-| Group | Description |
-|-------|-------------|
-| `DifftAddedFg` | Added text (green) |
-| `DifftRemovedFg` | Removed text (red) |
-| `DifftAddedInlineFg` | Inline added (green, bold) |
-| `DifftRemovedInlineFg` | Inline removed (red, bold) |
+| Group | Default | Description |
+|-------|---------|-------------|
+| `DifftAddedFg` | Links to `Added` | Added text |
+| `DifftRemovedFg` | Links to `Removed` | Removed text |
+| `DifftAddedInlineFg` | `Added` + bold | Inline added text |
+| `DifftRemovedInlineFg` | `Removed` + bold | Inline removed text |
 
-**Shared**:
+**Tree**:
 
-| Group | Description |
-|-------|-------------|
-| `DifftFiller` | Filler lines for alignment gaps |
-| `DifftDirectory` | Directory names in tree |
-| `DifftFileAdded` | Added file in tree |
-| `DifftFileDeleted` | Deleted file in tree |
-| `DifftTreeCurrent` | Current file highlight in tree |
+| Group | Default | Description |
+|-------|---------|-------------|
+| `DifftDirectory` | Links to `Directory` | Directory names |
+| `DifftFileAdded` | Links to `Added` | Added files |
+| `DifftFileDeleted` | Links to `Removed` | Deleted files |
+| `DifftTreeCurrent` | Derived from `Normal` | Current file highlight |
+
+**Other**:
+
+| Group | Default | Description |
+|-------|---------|-------------|
+| `DifftFiller` | Derived from `Normal` | Filler lines for alignment gaps |
 
 ## License
 

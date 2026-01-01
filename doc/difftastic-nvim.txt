@@ -141,7 +141,8 @@ Call the setup function with your options: >lua
             },
         },
         highlights = {
-            -- See |difftastic-nvim-highlights| for available groups
+            -- Override any group (see |difftastic-nvim-highlights|)
+            -- DifftAdded = { bg = "#2d4a3e" },
         },
     })
 <
@@ -197,27 +198,30 @@ Tree options:
 ==============================================================================
 7. HIGHLIGHTS                                       *difftastic-nvim-highlights*
 
-The following highlight groups can be customized:
+Highlights automatically inherit from your colorscheme's semantic groups
+(`Added`, `Removed`, `Directory`, `Normal`) and update when you switch
+themes. Background colors are derived by blending the foreground color
+with your `Normal` background at 25% opacity.
 
-Diff highlights for treesitter mode (background colors):
+Treesitter mode (background colors):
     Group                 Default                 Description ~
-    DifftAdded            bg=#2d4a3e              Added lines background
-    DifftRemoved          bg=#4a2d2d              Removed lines background
-    DifftAddedInline      bg=#3d6a4e              Inline added text
-    DifftRemovedInline    bg=#6a3d3d              Inline removed text
-    DifftFiller           fg=#3b4261              Filler lines for gaps
+    DifftAdded            Derived from `Added`    Added lines background
+    DifftRemoved          Derived from `Removed`  Removed lines background
 
-Diff highlights for difftastic mode (foreground colors like CLI):
-    DifftAddedFg          fg=#9ece6a              Added text (green)
-    DifftRemovedFg        fg=#f7768e              Removed text (red)
-    DifftAddedInlineFg    fg=#9ece6a, bold        Inline added (green bold)
-    DifftRemovedInlineFg  fg=#f7768e, bold        Inline removed (red bold)
+Difftastic mode (foreground colors):
+    DifftAddedFg          Links to `Added`        Added text
+    DifftRemovedFg        Links to `Removed`      Removed text
+    DifftAddedInlineFg    `Added` + bold          Inline added text
+    DifftRemovedInlineFg  `Removed` + bold        Inline removed text
 
 Tree highlights:
-    DifftDirectory        fg=#7aa2f7, bold        Directory names in tree
-    DifftFileAdded        fg=#9ece6a              Added file in tree
-    DifftFileDeleted      fg=#f7768e              Deleted file in tree
-    DifftTreeCurrent      bg=#3b4261, bold        Current file in tree
+    DifftDirectory        Links to `Directory`    Directory names
+    DifftFileAdded        Links to `Added`        Added files
+    DifftFileDeleted      Links to `Removed`      Deleted files
+    DifftTreeCurrent      Derived from `Normal`   Current file highlight
+
+Other:
+    DifftFiller           Derived from `Normal`   Filler lines for gaps
 
 Override in setup: >lua
 
