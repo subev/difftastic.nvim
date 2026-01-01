@@ -250,6 +250,8 @@ function M.open(state)
     vim.wo[state.tree_win].signcolumn = "no"
     vim.wo[state.tree_win].winfixwidth = true
     vim.wo[state.tree_win].cursorline = true
+    vim.wo[state.tree_win].scrollbind = false
+    vim.wo[state.tree_win].cursorbind = false
 
     vim.bo[state.tree_buf].buftype = "nofile"
     vim.bo[state.tree_buf].bufhidden = "wipe"
