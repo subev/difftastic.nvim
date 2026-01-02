@@ -20,6 +20,8 @@ M.config = {
     watch_index = true,
     --- Refresh on BufWritePost for files in the current diff
     refresh_on_save = true,
+    --- Automatically scroll to first hunk when opening a file
+    auto_scroll_first_hunk = true,
     keymaps = {
         next_file = "]f",
         prev_file = "[f",
@@ -134,6 +136,9 @@ function M.setup(opts)
     end
     if opts.refresh_on_save ~= nil then
         M.config.refresh_on_save = opts.refresh_on_save
+    end
+    if opts.auto_scroll_first_hunk ~= nil then
+        M.config.auto_scroll_first_hunk = opts.auto_scroll_first_hunk
     end
     if opts.keymaps then
         -- Manual merge to preserve explicit false/nil values (tbl_extend ignores nil)
@@ -268,6 +273,11 @@ function M.open(revset)
     if first_idx then
         M.show_file(first_idx)
     end
+
+    -- Focus the right (new) pane
+    if M.state.right_win and vim.api.nvim_win_is_valid(M.state.right_win) then
+        vim.api.nvim_set_current_win(M.state.right_win)
+    end
 end
 
 --- Refresh the diff view with updated data.
@@ -368,6 +378,13 @@ function M.close()
                     end
                 end
             end
+        end
+    end
+
+    -- Explicitly delete buffers to avoid name conflicts on reopen
+    for _, buf in ipairs({ M.state.tree_buf, M.state.left_buf, M.state.right_buf }) do
+        if buf and vim.api.nvim_buf_is_valid(buf) then
+            vim.api.nvim_buf_delete(buf, { force = true })
         end
     end
 

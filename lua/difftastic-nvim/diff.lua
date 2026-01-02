@@ -31,7 +31,9 @@ local FILETYPES = {
 
 --- Set buffer options for diff buffers.
 --- @param buf number Buffer handle
-local function setup_diff_buffer(buf)
+--- @param name string Buffer name
+local function setup_diff_buffer(buf, name)
+    vim.api.nvim_buf_set_name(buf, name)
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].bufhidden = "wipe"
     vim.bo[buf].swapfile = false
@@ -61,8 +63,8 @@ function M.open(state)
     state.left_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(state.left_win, state.left_buf)
 
-    setup_diff_buffer(state.left_buf)
-    setup_diff_buffer(state.right_buf)
+    setup_diff_buffer(state.left_buf, "difftastic://old")
+    setup_diff_buffer(state.right_buf, "difftastic://new")
     setup_diff_window(state.left_win)
     setup_diff_window(state.right_win)
 end
@@ -160,8 +162,26 @@ function M.render(state, file)
         end
     end
 
-    vim.api.nvim_win_set_cursor(state.left_win, { 1, 0 })
-    vim.api.nvim_win_set_cursor(state.right_win, { 1, 0 })
+    -- Set initial cursor position
+    local initial_line = 1
+
+    -- Auto-scroll to first hunk if enabled and hunks exist
+    if config.auto_scroll_first_hunk and #M.hunk_positions > 0 then
+        initial_line = M.hunk_positions[1]
+    end
+
+    vim.api.nvim_win_set_cursor(state.left_win, { initial_line, 0 })
+    vim.api.nvim_win_set_cursor(state.right_win, { initial_line, 0 })
+
+    -- Center the view on the initial line
+    if initial_line > 1 then
+        vim.api.nvim_win_call(state.left_win, function()
+            vim.cmd("normal! zz")
+        end)
+        vim.api.nvim_win_call(state.right_win, function()
+            vim.cmd("normal! zz")
+        end)
+    end
 end
 
 --- Get the current diff window (left or right).

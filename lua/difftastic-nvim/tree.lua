@@ -253,6 +253,7 @@ function M.open(state)
     vim.wo[state.tree_win].scrollbind = false
     vim.wo[state.tree_win].cursorbind = false
 
+    vim.api.nvim_buf_set_name(state.tree_buf, "difftastic://files")
     vim.bo[state.tree_buf].buftype = "nofile"
     vim.bo[state.tree_buf].bufhidden = "wipe"
     vim.bo[state.tree_buf].swapfile = false
