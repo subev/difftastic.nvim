@@ -7,6 +7,19 @@ view with syntax highlighting.
   <img src="assets/header.png" alt="difftastic.nvim" />
 </p>
 
+## 🔥 Fork Enhancements
+
+This fork adds several quality-of-life improvements on top of the original:
+
+- **🔄 Live Refresh** - Automatically updates when `.git/index` changes (external tools, git commands)
+- **📑 Dedicated Tab** - Opens in a separate tab (creates new or reuses existing) to avoid disrupting your workflow
+- **💾 Auto-refresh on Save** - Detects when you save a file in the diff and updates the view
+- **🎯 Auto-scroll to First Change** - Jumps to the first hunk when opening a file (centered in view)
+- **🏷️ Descriptive Tab Names** - Shows "difftastic" instead of generic buffer names
+- **⚙️ Smart Updates** - Only re-renders when files actually change (hash-based detection)
+
+All features are configurable and enabled by default. See [Configuration](#configuration) for details.
+
 ## Features
 
 - Side-by-side diff view with synchronized scrolling
@@ -145,9 +158,16 @@ Filler lines (`╱╱╱`) indicate where content exists on one side but not the
 
 ```lua
 require("difftastic-nvim").setup({
-    download = false,            -- Auto-download pre-built binary (default: false)
-    vcs = "jj",                  -- "jj" (default) or "git"
-    highlight_mode = "treesitter", -- "treesitter" (default) or "difftastic"
+    download = false,                 -- Auto-download pre-built binary (default: false)
+    vcs = "git",                      -- "git" (default) or "jj"
+    highlight_mode = "treesitter",    -- "treesitter" (default) or "difftastic"
+    hunk_wrap_file = false,           -- Wrap to next/prev file at last/first hunk (default: false)
+    
+    -- Fork enhancements (all default to true)
+    watch_index = true,               -- Watch .git/index for changes and auto-refresh
+    refresh_on_save = true,           -- Refresh on BufWritePost for files in diff
+    auto_scroll_first_hunk = true,    -- Auto-scroll to first hunk when opening a file
+    
     keymaps = {
         next_file = "]f",
         prev_file = "[f",
@@ -162,9 +182,9 @@ require("difftastic-nvim").setup({
     tree = {
         width = 40,
         icons = {
-            enable = true,    -- use nvim-web-devicons if available
-            dir_open = "",
-            dir_closed = "",
+            enable = true,            -- use nvim-web-devicons if available
+            dir_open = "",
+            dir_closed = "",
         },
     },
     highlights = {
