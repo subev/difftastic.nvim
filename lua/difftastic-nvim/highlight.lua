@@ -57,6 +57,13 @@ M.linked = {
     DifftFileAdded = { link = "Added" },
     DifftFileDeleted = { link = "Removed" },
     DifftDirectory = { link = "Directory" },
+
+    -- History tree highlights
+    DifftHistoryHeader = { link = "Title" },
+    DifftHistoryCount = { link = "Comment" },
+    DifftHistoryDate = { link = "Comment" },
+    DifftHistoryAuthor = { link = "Identifier" },
+    DifftHistoryMessage = { link = "Normal" },
 }
 
 

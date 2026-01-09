@@ -39,3 +39,12 @@ vim.api.nvim_create_user_command("DifftUpdate", function()
 end, {
     desc = "Update difftastic-nvim binary to latest release",
 })
+
+vim.api.nvim_create_user_command("DifftFileHistory", function(opts)
+    local file = opts.args ~= "" and opts.args or vim.fn.expand("%:.")
+    require("difftastic-nvim").open_file_history(file)
+end, {
+    nargs = "?",
+    complete = "file",
+    desc = "Open file history view (defaults to current file)",
+})
