@@ -113,6 +113,57 @@ fn jj_root() -> Option<PathBuf> {
         .map(|o| PathBuf::from(String::from_utf8_lossy(&o.stdout).trim()))
 }
 
+/// Represents a commit in the file history.
+#[derive(Debug)]
+struct FileCommit {
+    hash: String,
+    short_hash: String,
+    author: String,
+    relative_date: String,
+    message: String,
+}
+
+impl FileCommit {
+    fn into_lua(self, lua: &Lua) -> LuaResult<LuaTable> {
+        let table = lua.create_table()?;
+        table.set("hash", self.hash)?;
+        table.set("short_hash", self.short_hash)?;
+        table.set("author", self.author)?;
+        table.set("relative_date", self.relative_date)?;
+        table.set("message", self.message)?;
+        Ok(table)
+    }
+}
+
+/// Get commit history for a specific file.
+/// Uses `git log --follow` to track renames.
+/// Format: hash|short_hash|author|relative_date|message
+fn git_file_log(path: &Path) -> Vec<FileCommit> {
+    let output = Command::new("git")
+        .args(["log", "--follow", "--format=%H|%h|%an|%ar|%s", "--"])
+        .arg(path)
+        .output()
+        .ok();
+
+    let Some(output) = output.filter(|o| o.status.success()) else {
+        return Vec::new();
+    };
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.splitn(5, '|');
+            Some(FileCommit {
+                hash: parts.next()?.to_string(),
+                short_hash: parts.next()?.to_string(),
+                author: parts.next()?.to_string(),
+                relative_date: parts.next()?.to_string(),
+                message: parts.next()?.to_string(),
+            })
+        })
+        .collect()
+}
+
 /// Stats for a single file: (additions, deletions).
 type FileStats = HashMap<PathBuf, (u32, u32)>;
 
@@ -284,6 +335,87 @@ fn run_git_diff(extra_args: &[&str]) -> Result<Vec<difftastic::DifftFile>, Strin
 
     difftastic::parse(&String::from_utf8_lossy(&output.stdout))
         .map_err(|e| format!("Failed to parse difftastic JSON: {e}"))
+}
+
+/// Checks if a commit has a parent.
+fn commit_has_parent(commit: &str) -> bool {
+    Command::new("git")
+        .args(["rev-parse", "--verify", "--quiet", &format!("{}^", commit)])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Runs difftastic via git for a specific commit's changes to a file.
+/// Compares commit^ to commit for just that file.
+/// For initial commits (no parent), uses the empty tree as the base.
+fn run_git_diff_commit_file(
+    commit: &str,
+    path: &Path,
+) -> Result<Vec<difftastic::DifftFile>, String> {
+    let output = if commit_has_parent(commit) {
+        // Normal case: diff against parent
+        let range = format!("{}^..{}", commit, commit);
+        Command::new("git")
+            .args(["-c", "diff.external=difft", "diff", &range, "--"])
+            .arg(path)
+            .env("DFT_DISPLAY", "json")
+            .env("DFT_UNSTABLE", "yes")
+            .output()
+            .map_err(|e| format!("Failed to run git: {e}"))?
+    } else {
+        // Initial commit: use empty tree as base
+        // 4b825dc642cb6eb9a060e54bf8d69288fbee4904 is git's empty tree hash
+        let empty_tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+        let range = format!("{}..{}", empty_tree, commit);
+        Command::new("git")
+            .args(["-c", "diff.external=difft", "diff", &range, "--"])
+            .arg(path)
+            .env("DFT_DISPLAY", "json")
+            .env("DFT_UNSTABLE", "yes")
+            .output()
+            .map_err(|e| format!("Failed to run git: {e}"))?
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("git command failed: {stderr}"));
+    }
+
+    difftastic::parse(&String::from_utf8_lossy(&output.stdout))
+        .map_err(|e| format!("Failed to parse difftastic JSON: {e}"))
+}
+
+/// Gets diff stats for a specific commit's changes to a file.
+fn git_diff_stats_commit_file(commit: &str, path: &Path) -> FileStats {
+    let range = if commit_has_parent(commit) {
+        format!("{}^..{}", commit, commit)
+    } else {
+        // Initial commit: use empty tree as base
+        let empty_tree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+        format!("{}..{}", empty_tree, commit)
+    };
+
+    let output = Command::new("git")
+        .args(["diff", "--numstat", &range, "--"])
+        .arg(path)
+        .output()
+        .ok();
+
+    let Some(output) = output.filter(|o| o.status.success()) else {
+        return HashMap::new();
+    };
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut parts = line.split('\t');
+            let add = parts.next()?.parse().ok()?;
+            let del = parts.next()?.parse().ok()?;
+            let file_path = parts.next()?;
+            Some((PathBuf::from(file_path), (add, del)))
+        })
+        .collect()
 }
 
 /// Gets the merge-base of two git refs.
@@ -483,6 +615,52 @@ fn working_tree_content_for_vcs(path: &Path, vcs: &str) -> Option<String> {
     std::fs::read_to_string(root.join(path)).ok()
 }
 
+/// Gets the commit history for a specific file.
+/// Returns a table with commits array.
+fn get_file_history(lua: &Lua, path: String) -> LuaResult<LuaTable> {
+    let commits = git_file_log(Path::new(&path));
+
+    let commits_table = lua.create_table()?;
+    for (i, commit) in commits.into_iter().enumerate() {
+        commits_table.set(i + 1, commit.into_lua(lua)?)?;
+    }
+
+    let result = lua.create_table()?;
+    result.set("commits", commits_table)?;
+    Ok(result)
+}
+
+/// Runs difftastic for a specific commit's changes to a file.
+/// Returns the processed file data ready for display.
+fn run_diff_commit_file(lua: &Lua, (commit, path): (String, String)) -> LuaResult<LuaTable> {
+    let path_buf = PathBuf::from(&path);
+
+    let files = run_git_diff_commit_file(&commit, &path_buf).map_err(LuaError::RuntimeError)?;
+
+    let stats = git_diff_stats_commit_file(&commit, &path_buf);
+
+    let (old_ref, new_ref) = (format!("{}^", commit), commit.clone());
+
+    let display_files: Vec<_> = files
+        .into_par_iter()
+        .map(|file| {
+            let file_stats = stats.get(&file.path).copied();
+            let old_lines = into_lines(git_file_content(&old_ref, &file.path));
+            let new_lines = into_lines(git_file_content(&new_ref, &file.path));
+            processor::process_file(file, old_lines, new_lines, file_stats)
+        })
+        .collect();
+
+    let files_table = lua.create_table()?;
+    for (i, file) in display_files.into_iter().enumerate() {
+        files_table.set(i + 1, file.into_lua(lua)?)?;
+    }
+
+    let result = lua.create_table()?;
+    result.set("files", files_table)?;
+    Ok(result)
+}
+
 /// Unified implementation for running difftastic with any diff mode.
 /// Handles git and jj VCS, fetches file contents, and processes files in parallel.
 fn run_diff_impl(lua: &Lua, mode: DiffMode, vcs: &str) -> LuaResult<LuaTable> {
@@ -670,6 +848,14 @@ fn difftastic_nvim(lua: &Lua) -> LuaResult<LuaTable> {
     exports.set(
         "run_diff_staged",
         lua.create_function(|lua, vcs: String| run_diff_staged(lua, vcs))?,
+    )?;
+    exports.set(
+        "get_file_history",
+        lua.create_function(|lua, path: String| get_file_history(lua, path))?,
+    )?;
+    exports.set(
+        "run_diff_commit_file",
+        lua.create_function(|lua, args: (String, String)| run_diff_commit_file(lua, args))?,
     )?;
     Ok(exports)
 }

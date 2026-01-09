@@ -6,6 +6,7 @@ local diff = require("difftastic-nvim.diff")
 local tree = require("difftastic-nvim.tree")
 local highlight = require("difftastic-nvim.highlight")
 local keymaps = require("difftastic-nvim.keymaps")
+local history = require("difftastic-nvim.history")
 
 --- Default configuration
 M.config = {
@@ -407,6 +408,23 @@ function M.pick_range()
     require("difftastic-nvim.picker").pick_range(M.config.vcs, M.config.snacks_picker, function(start_rev, end_rev)
         M.open(string.format("%s..%s", start_rev, end_rev))
     end)
+end
+
+--- Open file history view.
+--- Shows commits that affected a specific file with difftastic diffs.
+--- @param file_path string|nil Path to the file (defaults to current buffer's file)
+function M.open_file_history(file_path)
+    file_path = file_path or vim.fn.expand("%:.")
+    if file_path == "" then
+        vim.notify("No file specified", vim.log.levels.ERROR)
+        return
+    end
+    history.open(file_path)
+end
+
+--- Close file history view.
+function M.close_file_history()
+    history.close()
 end
 
 return M

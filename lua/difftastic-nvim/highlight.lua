@@ -67,6 +67,13 @@ M.linked = {
     DifftPickerJjIconNormal = { link = "Directory" },
     DifftPickerJjRevset = { link = "Identifier" },
     DifftPickerJjAge = { link = "Comment" },
+
+    -- History tree highlights
+    DifftHistoryHeader = { link = "Title" },
+    DifftHistoryCount = { link = "Comment" },
+    DifftHistoryDate = { link = "Comment" },
+    DifftHistoryAuthor = { link = "Identifier" },
+    DifftHistoryMessage = { link = "Normal" },
 }
 
 

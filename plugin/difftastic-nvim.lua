@@ -55,3 +55,12 @@ vim.api.nvim_create_user_command("DifftPickRange", function()
 end, {
     desc = "Pick start/end revisions with snacks.nvim",
 })
+
+vim.api.nvim_create_user_command("DifftFileHistory", function(opts)
+    local file = opts.args ~= "" and opts.args or vim.fn.expand("%:.")
+    require("difftastic-nvim").open_file_history(file)
+end, {
+    nargs = "?",
+    complete = "file",
+    desc = "Open file history view (defaults to current file)",
+})
