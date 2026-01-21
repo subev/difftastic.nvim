@@ -7,18 +7,14 @@ view with syntax highlighting.
   <img src="assets/header.png" alt="difftastic.nvim" />
 </p>
 
-## 🔥 Fork Enhancements
+## Fork Enhancements
 
-This fork adds several quality-of-life improvements on top of the original:
+This fork adds the following on top of the original:
 
-- **🔄 Live Refresh** - Automatically updates when `.git/index` changes (external tools, git commands)
-- **📑 Dedicated Tab** - Opens in a separate tab (creates new or reuses existing) to avoid disrupting your workflow
-- **💾 Auto-refresh on Save** - Detects when you save a file in the diff and updates the view
-- **🎯 Auto-scroll to First Change** - Jumps to the first hunk when opening a file (centered in view)
-- **🏷️ Descriptive Tab Names** - Shows "difftastic" instead of generic buffer names
-- **⚙️ Smart Updates** - Only re-renders when files actually change (hash-based detection)
+- **File History** - `:DifftFileHistory` command shows commits that affected a specific file with difftastic diffs
+- **Descriptive Buffer Names** - Shows "difftastic://old" and "difftastic://new" instead of generic buffer names
 
-All features are configurable and enabled by default. See [Configuration](#configuration) for details.
+See [Configuration](#configuration) for details.
 
 ## Features
 
@@ -158,16 +154,11 @@ Filler lines (`╱╱╱`) indicate where content exists on one side but not the
 
 ```lua
 require("difftastic-nvim").setup({
-    download = false,                 -- Auto-download pre-built binary (default: false)
-    vcs = "git",                      -- "git" (default) or "jj"
-    highlight_mode = "treesitter",    -- "treesitter" (default) or "difftastic"
-    hunk_wrap_file = false,           -- Wrap to next/prev file at last/first hunk (default: false)
-    
-    -- Fork enhancements (all default to true)
-    watch_index = true,               -- Watch .git/index for changes and auto-refresh
-    refresh_on_save = true,           -- Refresh on BufWritePost for files in diff
-    auto_scroll_first_hunk = true,    -- Auto-scroll to first hunk when opening a file
-    
+    download = false,              -- Auto-download pre-built binary (default: false)
+    vcs = "jj",                    -- "jj" (default) or "git"
+    hunk_wrap_file = false,        -- Next hunk at last hunk goes to next file
+    highlight_mode = "treesitter", -- "treesitter" (default) or "difftastic"
+    scroll_to_first_hunk = false,  -- Auto-scroll to first hunk after opening a file (default: false)
     keymaps = {
         next_file = "]f",
         prev_file = "[f",

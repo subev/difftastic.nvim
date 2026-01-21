@@ -7,6 +7,17 @@ local NuiLine = require("nui.line")
 local DEFAULT_ICON = ""
 local has_devicons, devicons = pcall(require, "nvim-web-devicons")
 
+--- Safely set buffer name, deleting any existing buffer with the same name.
+--- @param buf number Buffer handle
+--- @param name string Buffer name
+local function safe_buf_set_name(buf, name)
+    local existing = vim.fn.bufnr(name)
+    if existing ~= -1 and existing ~= buf then
+        pcall(vim.api.nvim_buf_delete, existing, { force = true })
+    end
+    vim.api.nvim_buf_set_name(buf, name)
+end
+
 --- Module state
 --- @type table|nil
 M.tree = nil
@@ -253,7 +264,7 @@ function M.open(state)
     vim.wo[state.tree_win].scrollbind = false
     vim.wo[state.tree_win].cursorbind = false
 
-    vim.api.nvim_buf_set_name(state.tree_buf, "difftastic://files")
+    safe_buf_set_name(state.tree_buf, "difftastic://files")
     vim.bo[state.tree_buf].buftype = "nofile"
     vim.bo[state.tree_buf].bufhidden = "wipe"
     vim.bo[state.tree_buf].swapfile = false

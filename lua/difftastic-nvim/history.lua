@@ -131,13 +131,10 @@ function M.open(file_path)
     vim.cmd("tabnew")
     M.state.tabpage = vim.api.nvim_get_current_tabpage()
 
-    -- Remember the initial empty window so we can close it later
-    local initial_win = vim.api.nvim_get_current_win()
-
     -- Open tree sidebar
     history_tree.open(M.state)
 
-    -- Open diff panes
+    -- Open diff panes (reuses the window created by tabnew)
     diff.open(M.state)
 
     -- Set up keymaps for diff buffers
@@ -149,11 +146,6 @@ function M.open(file_path)
 
     -- Set up keymaps for tree buffer
     setup_tree_keymaps()
-
-    -- Close the initial empty window created by tabnew
-    if vim.api.nvim_win_is_valid(initial_win) then
-        vim.api.nvim_win_close(initial_win, true)
-    end
 
     -- Show first commit
     local first_idx = history_tree.first_commit()

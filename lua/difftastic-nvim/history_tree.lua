@@ -4,6 +4,17 @@ local M = {}
 local NuiTree = require("nui.tree")
 local NuiLine = require("nui.line")
 
+--- Safely set buffer name, deleting any existing buffer with the same name.
+--- @param buf number Buffer handle
+--- @param name string Buffer name
+local function safe_buf_set_name(buf, name)
+    local existing = vim.fn.bufnr(name)
+    if existing ~= -1 and existing ~= buf then
+        pcall(vim.api.nvim_buf_delete, existing, { force = true })
+    end
+    vim.api.nvim_buf_set_name(buf, name)
+end
+
 --- Module state
 --- @type table|nil
 M.tree = nil
@@ -110,7 +121,7 @@ function M.open(state)
     vim.wo[state.tree_win].cursorbind = false
     vim.wo[state.tree_win].wrap = false
 
-    vim.api.nvim_buf_set_name(state.tree_buf, "difftastic://history")
+    safe_buf_set_name(state.tree_buf, "difftastic://history")
     vim.bo[state.tree_buf].buftype = "nofile"
     vim.bo[state.tree_buf].bufhidden = "wipe"
     vim.bo[state.tree_buf].swapfile = false
