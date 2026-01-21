@@ -77,6 +77,8 @@ Requires a Rust toolchain. The plugin automatically builds from source on first 
 | `:DifftPickRange` | Pick end revision, then pick a parent revision as range start |
 | `:DifftClose` | Close the diff view |
 | `:DifftUpdate` | Update to latest release (requires `download = true`) |
+| `:DifftFileHistory` | Open file history view for current file (git only) |
+| `:DifftFileHistory <path>` | Open file history view for specified file |
 
 ### Examples (jj)
 
@@ -115,6 +117,20 @@ Requires a Rust toolchain. The plugin automatically builds from source on first 
 " Diff a commit range
 :Difft main..HEAD
 ```
+
+### File History (git only)
+
+View the commit history for a specific file with difftastic diffs:
+
+```vim
+" Show history for current file
+:DifftFileHistory
+
+" Show history for a specific file
+:DifftFileHistory path/to/file.lua
+```
+
+Navigate between commits using `]f` / `[f` and between hunks using `]c` / `[c`.
 
 ## Keybindings
 
