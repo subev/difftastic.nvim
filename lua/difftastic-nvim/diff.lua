@@ -72,8 +72,8 @@ function M.open(state)
     state.left_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(state.left_win, state.left_buf)
 
-    -- Create right diff pane
-    vim.cmd("vsplit")
+    -- Create right diff pane (rightbelow ensures it appears to the RIGHT)
+    vim.cmd("rightbelow vsplit")
     state.right_win = vim.api.nvim_get_current_win()
     state.right_buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(state.right_win, state.right_buf)

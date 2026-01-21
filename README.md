@@ -7,15 +7,6 @@ view with syntax highlighting.
   <img src="assets/header.png" alt="difftastic.nvim" />
 </p>
 
-## Fork Enhancements
-
-This fork adds the following on top of the original:
-
-- **File History** - `:DifftFileHistory` command shows commits that affected a specific file with difftastic diffs
-- **Descriptive Buffer Names** - Shows "difftastic://old" and "difftastic://new" instead of generic buffer names
-
-See [Configuration](#configuration) for details.
-
 ## Features
 
 - Side-by-side diff view with synchronized scrolling
@@ -95,6 +86,8 @@ Requires a Rust toolchain. The plugin automatically builds from source on first 
 | `:Difft <ref>` | Open diff view for a jj revset or git commit/range |
 | `:DifftClose` | Close the diff view |
 | `:DifftUpdate` | Update to latest release (requires `download = true`) |
+| `:DifftFileHistory` | Open file history view for current file (git only) |
+| `:DifftFileHistory <path>` | Open file history view for specified file |
 
 ### Examples (jj)
 
@@ -130,6 +123,20 @@ Requires a Rust toolchain. The plugin automatically builds from source on first 
 " Diff a commit range
 :Difft main..HEAD
 ```
+
+### File History (git only)
+
+View the commit history for a specific file with difftastic diffs:
+
+```vim
+" Show history for current file
+:DifftFileHistory
+
+" Show history for a specific file
+:DifftFileHistory path/to/file.lua
+```
+
+Navigate between commits using `]f` / `[f` and between hunks using `]c` / `[c`.
 
 ## Keybindings
 
@@ -173,9 +180,9 @@ require("difftastic-nvim").setup({
     tree = {
         width = 40,
         icons = {
-            enable = true,            -- use nvim-web-devicons if available
-            dir_open = "",
-            dir_closed = "",
+            enable = true,    -- use nvim-web-devicons if available
+            dir_open = "",
+            dir_closed = "",
         },
     },
     highlights = {

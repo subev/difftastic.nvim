@@ -227,6 +227,11 @@ function M.show_commit(idx)
 
     if file_data then
         diff.render(M.state, file_data)
+        local config = require("difftastic-nvim").config
+        if config.scroll_to_first_hunk then
+            diff.first_hunk(M.state)
+            vim.cmd("normal! zz")
+        end
     else
         -- Handle case where diff couldn't be fetched (e.g., initial commit)
         -- Show empty diff with message
