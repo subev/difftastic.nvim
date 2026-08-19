@@ -368,7 +368,10 @@ function M.goto_file()
     -- Fallback to line 1 if no mapping found
     target_line = target_line or 1
 
-    local filepath = file.path
+    -- file.path is relative to the repo root, which may differ from cwd
+    local root_cmd = M.config.vcs == "jj" and { "jj", "root" } or { "git", "rev-parse", "--show-toplevel" }
+    local root = vim.fn.systemlist(root_cmd)[1]
+    local filepath = (vim.v.shell_error == 0 and root and root ~= "") and (root .. "/" .. file.path) or file.path
 
     -- Close diff view (switches to original tab, closes diff tab)
     M.close()
