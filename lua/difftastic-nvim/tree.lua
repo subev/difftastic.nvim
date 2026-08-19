@@ -468,6 +468,40 @@ function M.render(state)
     end
 end
 
+--- Rebuild the tree with new file data.
+--- Called during refresh to update the tree without recreating the window.
+--- @param state table Plugin state with updated files
+function M.rebuild(state)
+    if not state.tree_buf or not vim.api.nvim_buf_is_valid(state.tree_buf) then
+        return
+    end
+
+    local root = build_intermediate_tree(state.files)
+    propagate_stats(root)
+    flatten_node(root)
+    sort_node(root)
+
+    M.total_additions = root.additions
+    M.total_deletions = root.deletions
+
+    M.file_to_node_id = {}
+    local nui_nodes = convert_to_nui_nodes(root, M.file_to_node_id)
+
+    vim.bo[state.tree_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(state.tree_buf, 0, -1, false, {})
+
+    render_header(state, root.additions, root.deletions)
+
+    M.tree = NuiTree({
+        bufnr = state.tree_buf,
+        nodes = nui_nodes,
+        prepare_node = prepare_node,
+    })
+
+    M.tree:render(M.header_lines + 1)
+    vim.bo[state.tree_buf].modifiable = false
+end
+
 local function collect_visible_files(tree)
     local files = {}
 

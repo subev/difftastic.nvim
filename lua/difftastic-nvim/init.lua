@@ -7,6 +7,7 @@ local tree = require("difftastic-nvim.tree")
 local highlight = require("difftastic-nvim.highlight")
 local keymaps = require("difftastic-nvim.keymaps")
 local history = require("difftastic-nvim.history")
+local watcher = require("difftastic-nvim.watcher")
 
 --- Default configuration
 M.config = {
@@ -18,6 +19,10 @@ M.config = {
     hunk_wrap_file = true,
     --- When true, scroll to first hunk after opening a file
     scroll_to_first_hunk = true,
+    --- When true, watch .git/index and refresh the open diff view on changes (git only)
+    watch_index = true,
+    --- When true, refresh the open diff view when a file in the diff is saved
+    refresh_on_save = true,
     keymaps = {
         next_file = "]f",
         prev_file = "[f",
@@ -58,6 +63,9 @@ M.state = {
     right_buf = nil,
     original_tabpage = nil,
     diff_tabpage = nil,
+    revset = nil,
+    files_hash = nil,
+    bufwrite_autocmd = nil,
 }
 
 local function git_range_label(revset)
@@ -113,6 +121,12 @@ function M.setup(opts)
     if opts.scroll_to_first_hunk ~= nil then
         M.config.scroll_to_first_hunk = opts.scroll_to_first_hunk
     end
+    if opts.watch_index ~= nil then
+        M.config.watch_index = opts.watch_index
+    end
+    if opts.refresh_on_save ~= nil then
+        M.config.refresh_on_save = opts.refresh_on_save
+    end
     if opts.keymaps then
         -- Manual merge to preserve explicit false values (tbl_extend ignores them)
         -- Note: nil values are skipped by pairs(), so they keep the default
@@ -136,6 +150,83 @@ function M.setup(opts)
     binary.ensure_exists(M.config.download)
 end
 
+--- Fetch diff data for a revset.
+--- @param revset string|nil
+--- @return table|nil result
+local function fetch_diff(revset)
+    if revset == nil then
+        return binary.get().run_diff_unstaged(M.config.vcs)
+    elseif revset == "--staged" then
+        return binary.get().run_diff_staged(M.config.vcs)
+    end
+    return binary.get().run_diff(revset, M.config.vcs)
+end
+
+--- Compute a hash of the file list to detect refreshes with no visible change.
+--- @param files table[] List of file objects
+--- @return string hash
+local function compute_files_hash(files)
+    local parts = {}
+    for _, file in ipairs(files) do
+        table.insert(parts, string.format(
+            "%s:%s:%d:%d",
+            file.path or "",
+            file.status or "",
+            file.additions or 0,
+            file.deletions or 0
+        ))
+    end
+    return table.concat(parts, "|")
+end
+
+--- Check if a file path is part of the current diff.
+--- @param path string File path to check
+--- @return boolean
+local function is_file_in_diff(path)
+    local normalized = path:gsub("^%./", "")
+    for _, file in ipairs(M.state.files) do
+        if (file.path or ""):gsub("^%./", "") == normalized then
+            return true
+        end
+    end
+    return false
+end
+
+--- Start file watchers and autocmds for live refresh.
+local function start_watchers()
+    if M.config.watch_index and M.config.vcs == "git" then
+        watcher.start(function()
+            -- Only refresh if we're on the difftastic tab
+            if M.state.diff_tabpage and vim.api.nvim_get_current_tabpage() == M.state.diff_tabpage then
+                M.refresh()
+            end
+        end)
+    end
+
+    if M.config.refresh_on_save then
+        M.state.bufwrite_autocmd = vim.api.nvim_create_autocmd("BufWritePost", {
+            callback = function(args)
+                if not M.state.diff_tabpage then
+                    return
+                end
+                local saved_path = vim.fn.fnamemodify(args.file, ":.")
+                if is_file_in_diff(saved_path) then
+                    M.refresh()
+                end
+            end,
+        })
+    end
+end
+
+--- Stop file watchers and autocmds.
+local function stop_watchers()
+    watcher.stop()
+    if M.state.bufwrite_autocmd then
+        pcall(vim.api.nvim_del_autocmd, M.state.bufwrite_autocmd)
+        M.state.bufwrite_autocmd = nil
+    end
+end
+
 --- Open diff view for a revision/commit range.
 --- @param revset string|nil jj revset or git commit range (nil = unstaged, "--staged" = staged)
 function M.open(revset)
@@ -143,14 +234,7 @@ function M.open(revset)
         M.close()
     end
 
-    local result
-    if revset == nil then
-        result = binary.get().run_diff_unstaged(M.config.vcs)
-    elseif revset == "--staged" then
-        result = binary.get().run_diff_staged(M.config.vcs)
-    else
-        result = binary.get().run_diff(revset, M.config.vcs)
-    end
+    local result = fetch_diff(revset)
     if not result.files or #result.files == 0 then
         vim.notify("No changes found", vim.log.levels.INFO)
         return
@@ -158,6 +242,8 @@ function M.open(revset)
 
     M.state.files = result.files
     M.state.current_file_idx = 1
+    M.state.revset = revset
+    M.state.files_hash = compute_files_hash(result.files)
     M.state.range_kind, M.state.range_label = range_context(revset, M.config.vcs)
 
     -- Store original tabpage and create new one for diff view
@@ -173,12 +259,58 @@ function M.open(revset)
     if first_idx then
         M.show_file(first_idx)
     end
+
+    start_watchers()
+end
+
+--- Refresh the open diff view with fresh data, preserving the selected file.
+function M.refresh()
+    if not M.state.diff_tabpage or not vim.api.nvim_tabpage_is_valid(M.state.diff_tabpage) then
+        return
+    end
+
+    local result = fetch_diff(M.state.revset)
+    if not result or not result.files or #result.files == 0 then
+        vim.notify("No changes found", vim.log.levels.INFO)
+        M.close()
+        return
+    end
+
+    local new_hash = compute_files_hash(result.files)
+    if new_hash == M.state.files_hash then
+        return
+    end
+
+    local current_path = nil
+    if M.state.files[M.state.current_file_idx] then
+        current_path = M.state.files[M.state.current_file_idx].path
+    end
+
+    M.state.files = result.files
+    M.state.files_hash = new_hash
+
+    -- Keep the same file selected if it is still in the diff
+    local new_idx = 1
+    if current_path then
+        for i, file in ipairs(result.files) do
+            if file.path == current_path then
+                new_idx = i
+                break
+            end
+        end
+    end
+    M.state.current_file_idx = new_idx
+
+    tree.rebuild(M.state)
+    M.show_file(new_idx)
 end
 
 --- Close the diff view.
 function M.close()
     local diff_tabpage = M.state.diff_tabpage
     local original_tabpage = M.state.original_tabpage
+
+    stop_watchers()
 
     -- Reset state first
     M.state = {
@@ -194,6 +326,9 @@ function M.close()
         right_buf = nil,
         original_tabpage = nil,
         diff_tabpage = nil,
+        revset = nil,
+        files_hash = nil,
+        bufwrite_autocmd = nil,
     }
 
     -- Switch to original tabpage if valid
