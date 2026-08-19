@@ -160,6 +160,17 @@ function M.open(state)
     setup_diff_window(state.right_win)
 end
 
+--- Safely set buffer name, deleting any existing buffer with the same name.
+--- @param buf number Buffer handle
+--- @param name string Buffer name
+local function safe_buf_set_name(buf, name)
+    local existing = vim.fn.bufnr(name)
+    if existing ~= -1 and existing ~= buf then
+        pcall(vim.api.nvim_buf_delete, existing, { force = true })
+    end
+    vim.api.nvim_buf_set_name(buf, name)
+end
+
 --- Render a file's diff content into the left/right panes.
 --- @param state table Plugin state
 --- @param file table File data with rows, hunk_starts, language
@@ -194,6 +205,13 @@ function M.render(state, file)
     vim.api.nvim_buf_set_lines(state.right_buf, 0, -1, false, right_lines)
     vim.bo[state.left_buf].modifiable = false
     vim.bo[state.right_buf].modifiable = false
+
+    -- Name the panes after the file being diffed
+    if file.path then
+        local filename = vim.fn.fnamemodify(file.path, ":t")
+        safe_buf_set_name(state.left_buf, "OLD: " .. filename)
+        safe_buf_set_name(state.right_buf, "NEW: " .. filename)
+    end
 
     -- Apply syntax highlighting based on mode
     local use_treesitter = config.highlight_mode ~= "difftastic"
