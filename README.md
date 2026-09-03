@@ -7,6 +7,16 @@ view with syntax highlighting.
   <img src="assets/header.png" alt="difftastic.nvim" />
 </p>
 
+## 🔥 Fork Enhancements
+
+This fork adds the following on top of [`clabby/difftastic.nvim`](https://github.com/clabby/difftastic.nvim):
+
+- **📜 File History** - `:DifftFileHistory` opens the commit history of a single file, with `]f` / `[f` to move between commits (git only)
+- **🔄 Live Refresh** - Watches `.git/index` (debounced) and refreshes on save, skipping the re-render when the file set is unchanged (`watch_index`, `refresh_on_save`)
+- **🔍 Richer Commit Picker** - `:DifftPick` rows carry a compact age (`22h`, `2w`, `3mo`) and diffstat (`3f +309 -8`), in a window sized to the content
+- **🏷️ Named Diff Panes** - The panes are named `OLD: <file>` / `NEW: <file>` instead of showing generic buffer names
+- **📂 `gf` Across Subdirectories** - The jump target is resolved against the repo root, so it works when nvim's cwd is below it
+
 ## Features
 
 - Side-by-side diff view with synchronized scrolling
@@ -160,6 +170,8 @@ require("difftastic-nvim").setup({
     highlight_mode = "treesitter", -- "treesitter" (default) or "difftastic"
     hunk_wrap_file = true,          -- Next hunk at last hunk goes to next file
     scroll_to_first_hunk = true,  -- Auto-scroll to first hunk after opening a file (default: true)
+    watch_index = true,           -- Refresh when .git/index changes (default: true)
+    refresh_on_save = true,       -- Refresh when a file shown in the diff is saved (default: true)
     snacks_picker = {
         enabled = false,          -- opt-in snacks.nvim integration (default: false)
         limit = 200,              -- number of revisions/commits to list in :DifftPick
