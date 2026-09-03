@@ -113,7 +113,8 @@ Downloaded binaries are stored in: >
     Notes:
     - Requires snacks.nvim and `snacks_picker.enabled = true`.
     - For jj, the picker includes a preview pane with `jj log` output.
-    - For git, the picker currently has no preview pane.
+    - For git, the picker has no preview pane; each row shows the short hash,
+      a compact age, the diffstat and the subject.
 
                                                                  *:DifftPickRange*
 :DifftPickRange
@@ -126,6 +127,14 @@ Downloaded binaries are stored in: >
     Notes:
     - Requires snacks.nvim and `snacks_picker.enabled = true`.
     - The start picker is restricted to parent history of the selected end.
+
+                                                            *:DifftFileHistory*
+:DifftFileHistory [{path}]
+    Open the commit history of a single file in the diff view (git only).
+    Without {path}, the current buffer's file is used.
+
+    Each commit is diffed against its parent. Use `]f` / `[f` to move between
+    commits and `]c` / `[c` to move between hunks.
 
 ==============================================================================
 5. KEYBINDINGS                                     *difftastic-nvim-keybindings*
@@ -142,6 +151,7 @@ Default keybindings:
     [c          Previous hunk (see |difftastic-nvim-hunk-wrap-file|)
     <Tab>       Toggle focus between file tree and diff panes
     <CR>        Select file or toggle directory (in tree)
+    gf          Open the real file under the cursor
     q           Close diff view
 
 Filler lines (shown as diagonal lines) indicate where content exists on one
@@ -158,6 +168,8 @@ Call the setup function with your options: >lua
         highlight_mode = "treesitter", -- "treesitter" (default) or "difftastic"
         hunk_wrap_file = true, -- Wrap to next/prev file at end/start of hunks
         scroll_to_first_hunk = true,  -- Auto-scroll to first hunk after opening a file (default: true)
+        watch_index = true,     -- Refresh on .git/index changes (default: true)
+        refresh_on_save = true, -- Refresh on save of a diffed file (default: true)
         snacks_picker = {
             enabled = false,    -- Enable :DifftPick (default: false)
             limit = 200,        -- Max revisions/commits to show (default: 200)
@@ -172,6 +184,7 @@ Call the setup function with your options: >lua
             focus_tree = "<Tab>",
             focus_diff = "<Tab>",
             select = "<CR>",
+            goto_file = "gf",
         },
         tree = {
             width = 40,
@@ -255,6 +268,20 @@ scroll_to_first_hunk ~
 
     Default: true
 
+                                                  *difftastic-nvim-live-refresh*
+watch_index ~
+    When enabled, `.git/index` is watched (debounced) and the open diff view
+    refreshes when it changes, so commits, stages and resets made outside
+    Neovim show up without reopening the view.
+
+    Default: true
+
+refresh_on_save ~
+    When enabled, writing a file that appears in the open diff view refreshes
+    it. Refreshes that would not change the file set are skipped.
+
+    Default: true
+
                                                         *difftastic-nvim-keymaps*
 Keymap options:
 
@@ -266,6 +293,7 @@ Keymap options:
     focus_tree      Move focus to the file tree (from diff panes)
     focus_diff      Move focus to the diff pane (from tree)
     select          Select file or toggle directory in tree
+    goto_file       Open the real file under the cursor
 
                                                            *difftastic-nvim-tree*
 Tree options:
