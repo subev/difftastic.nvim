@@ -31,6 +31,14 @@ local function pad_right(s, width)
     return s .. string.rep(" ", pad)
 end
 
+local function pad_left(s, width)
+    local pad = width - display_width(s)
+    if pad <= 0 then
+        return s
+    end
+    return string.rep(" ", pad) .. s
+end
+
 local function fit_description(desc)
     desc = desc ~= "" and desc or "(no description set)"
     if vim.fn.strchars(desc) > 40 then
@@ -144,12 +152,61 @@ end
 -- test-only hook
 M._apply_preview_hover_highlight = apply_preview_hover_highlight
 
+local function compact_age(ts)
+    local secs = math.max(os.time() - ts, 0)
+    local mins = math.floor(secs / 60)
+    if mins < 1 then
+        return "now"
+    end
+    if mins < 60 then
+        return mins .. "m"
+    end
+    local hours = math.floor(mins / 60)
+    if hours < 24 then
+        return hours .. "h"
+    end
+    local days = math.floor(hours / 24)
+    if days < 14 then
+        return days .. "d"
+    end
+    if days < 60 then
+        return math.floor(days / 7) .. "w"
+    end
+    if days < 730 then
+        return math.floor(days / 30.44) .. "mo"
+    end
+    return math.floor(days / 365.25) .. "y"
+end
+
+local function parse_shortstat(line)
+    return {
+        files = tonumber(line:match("(%d+) files? changed")) or 0,
+        ins = tonumber(line:match("(%d+) insertions?%(%+%)")) or 0,
+        del = tonumber(line:match("(%d+) deletions?%(%-%)")) or 0,
+    }
+end
+
+local function staged_stat()
+    local lines = run_command({ "git", "diff", "--cached", "--shortstat" })
+    if not lines then
+        return nil
+    end
+    for _, line in ipairs(lines) do
+        if line:match("files? changed") then
+            return parse_shortstat(line)
+        end
+    end
+    return nil
+end
+
 local function git_items(limit, revspec, exclude_rev, include_staged)
     local cmd = {
         "git",
         "log",
-        "--date=short",
-        "--pretty=format:%H\t%h\t%ad\t%s",
+        -- \30 marks a commit header line so the --shortstat lines between them
+        -- can be attributed to the commit they belong to
+        "--pretty=format:\30%H\t%h\t%at\t%s",
+        "--shortstat",
         "-n",
         tostring(limit),
     }
@@ -162,28 +219,62 @@ local function git_items(limit, revspec, exclude_rev, include_staged)
         return nil
     end
 
-    local has_staged_changes = false
-    if include_staged then
-        vim.fn.system({ "git", "diff", "--cached", "--quiet" })
-        has_staged_changes = (vim.v.shell_error == 1)
+    local raw_items = {}
+    local current
+    for _, line in ipairs(lines) do
+        local header = line:match("^\30(.*)$")
+        if header then
+            current = nil
+            local full, short, ts, subject = header:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t(.*)$")
+            if full and short and full ~= exclude_rev then
+                current = {
+                    rev = full,
+                    short = short,
+                    age = compact_age(tonumber(ts) or os.time()),
+                    subject = subject or "",
+                }
+                table.insert(raw_items, current)
+            end
+        elseif current and line:match("files? changed") then
+            current.stat = parse_shortstat(line)
+        end
+    end
+
+    local staged = include_staged and staged_stat() or nil
+    if staged then
+        table.insert(
+            raw_items,
+            1,
+            { rev = "--staged", short = "(STAGED)", age = "", stat = staged, subject = "staged changes" }
+        )
+    end
+
+    local w = { short = 0, age = 0, files = 0, ins = 0, del = 0 }
+    for _, item in ipairs(raw_items) do
+        if item.stat then
+            item.files = item.stat.files .. "f"
+            item.ins = "+" .. item.stat.ins
+            item.del = "-" .. item.stat.del
+        end
+        for key in pairs(w) do
+            w[key] = math.max(w[key], display_width(item[key] or ""))
+        end
     end
 
     local items = {}
-    if has_staged_changes then
+    for _, item in ipairs(raw_items) do
         table.insert(items, {
-            rev = "--staged",
-            text = "(STAGED)",
+            rev = item.rev,
+            text = string.format(
+                "%s %s %s %s %s  %s",
+                pad_right(item.short, w.short),
+                pad_left(item.age, w.age),
+                pad_left(item.files or "", w.files),
+                pad_left(item.ins or "", w.ins),
+                pad_left(item.del or "", w.del),
+                item.subject
+            ),
         })
-    end
-
-    for _, line in ipairs(lines) do
-        local full, short, date, subject = line:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t(.*)$")
-        if full and short and full ~= exclude_rev then
-            table.insert(items, {
-                rev = full,
-                text = string.format("%s  %s  %s", short, date or "", subject or ""),
-            })
-        end
     end
     return items
 end
@@ -302,6 +393,35 @@ local function load_items(vcs, opts, rev_filter, exclude_rev, include_staged)
     return jj_items(opts.limit, jj_revset, exclude_rev)
 end
 
+-- the stock "select" layout caps at 100 columns / 10 rows, which truncates
+-- subjects and hides most of the log; size to the content instead
+local function select_layout(items)
+    local width = 0
+    for _, item in ipairs(items) do
+        width = math.max(width, display_width(item.text))
+    end
+    width = width + display_width(tostring(#items)) + 6 -- list index prefix, padding, borders
+
+    return {
+        layout = {
+            layout = {
+                width = width,
+                min_width = 60,
+                max_width = math.floor(vim.o.columns * 0.9),
+                height = 0.9,
+                max_height = 200,
+            },
+            config = function(layout)
+                for _, box in ipairs(layout.layout) do
+                    if box.win == "list" and not box.height then
+                        box.height = math.max(math.min(#items, math.floor(vim.o.lines * 0.85) - 6), 2)
+                    end
+                end
+            end,
+        },
+    }
+end
+
 local function open_picker(snacks, vcs, opts, items, title, on_select, jj_preview_revset)
     if vcs == "git" then
         snacks.picker.select(items, {
@@ -309,6 +429,7 @@ local function open_picker(snacks, vcs, opts, items, title, on_select, jj_previe
             format_item = function(item)
                 return item.text
             end,
+            snacks = select_layout(items),
         }, function(choice)
             if choice and choice.rev then
                 on_select(choice.rev)
