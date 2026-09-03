@@ -422,6 +422,13 @@ local function select_layout(items)
     }
 end
 
+-- typing should narrow the log, not re-rank it: substring matching only, and
+-- matches keep their newest-first order
+local ORDERED_MATCH = {
+    matcher = { fuzzy = false },
+    sort = { fields = { "idx" } },
+}
+
 local function open_picker(snacks, vcs, opts, items, title, on_select, jj_preview_revset)
     if vcs == "git" then
         snacks.picker.select(items, {
@@ -429,7 +436,7 @@ local function open_picker(snacks, vcs, opts, items, title, on_select, jj_previe
             format_item = function(item)
                 return item.text
             end,
-            snacks = select_layout(items),
+            snacks = vim.tbl_extend("force", select_layout(items), ORDERED_MATCH),
         }, function(choice)
             if choice and choice.rev then
                 on_select(choice.rev)
@@ -442,6 +449,8 @@ local function open_picker(snacks, vcs, opts, items, title, on_select, jj_previe
         snacks.picker.pick({
             title = title,
             items = items,
+            matcher = ORDERED_MATCH.matcher,
+            sort = ORDERED_MATCH.sort,
             format = function(item)
                 if item.chunks then
                     return item.chunks
@@ -484,6 +493,7 @@ local function open_picker(snacks, vcs, opts, items, title, on_select, jj_previe
             end
             return item.text
         end,
+        snacks = ORDERED_MATCH,
     }, function(choice)
         if choice and choice.rev then
             on_select(choice.rev)
