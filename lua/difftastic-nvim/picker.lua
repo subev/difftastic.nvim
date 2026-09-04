@@ -172,10 +172,10 @@ local function compact_age(ts)
     if days < 60 then
         return math.floor(days / 7) .. "w"
     end
-    if days < 730 then
+    if days < 365 then
         return math.floor(days / 30.44) .. "mo"
     end
-    return math.floor(days / 365.25) .. "y"
+    return math.floor(days / 365) .. "y"
 end
 
 local function parse_shortstat(line)
@@ -203,10 +203,10 @@ local function git_items(limit, revspec, exclude_rev, include_staged)
     local cmd = {
         "git",
         "log",
-        -- \30 marks a commit header line so the --shortstat lines between them
-        -- can be attributed to the commit they belong to
+        -- \30 marks commit headers so --shortstat lines attribute to the right commit
         "--pretty=format:\30%H\t%h\t%at\t%s",
         "--shortstat",
+        "--diff-merges=first-parent",
         "-n",
         tostring(limit),
     }
@@ -222,16 +222,16 @@ local function git_items(limit, revspec, exclude_rev, include_staged)
     local raw_items = {}
     local current
     for _, line in ipairs(lines) do
-        local header = line:match("^\30(.*)$")
-        if header then
+        local full, short, ts, subject = line:match("^\30([^\t]+)\t([^\t]+)\t([^\t]+)\t(.*)$")
+        if full then
             current = nil
-            local full, short, ts, subject = header:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t(.*)$")
-            if full and short and full ~= exclude_rev then
+            if full ~= exclude_rev then
                 current = {
                     rev = full,
                     short = short,
                     age = compact_age(tonumber(ts) or os.time()),
                     subject = subject or "",
+                    match_text = short .. " " .. (subject or ""),
                 }
                 table.insert(raw_items, current)
             end
@@ -245,7 +245,14 @@ local function git_items(limit, revspec, exclude_rev, include_staged)
         table.insert(
             raw_items,
             1,
-            { rev = "--staged", short = "(STAGED)", age = "", stat = staged, subject = "staged changes" }
+            {
+                rev = "--staged",
+                short = "(STAGED)",
+                age = "",
+                stat = staged,
+                subject = "staged changes",
+                match_text = "(STAGED) staged changes",
+            }
         )
     end
 
@@ -256,15 +263,18 @@ local function git_items(limit, revspec, exclude_rev, include_staged)
             item.ins = "+" .. item.stat.ins
             item.del = "-" .. item.stat.del
         end
-        for key in pairs(w) do
-            w[key] = math.max(w[key], display_width(item[key] or ""))
-        end
+        w.short = math.max(w.short, display_width(item.short))
+        w.age = math.max(w.age, display_width(item.age))
+        w.files = math.max(w.files, display_width(item.files or ""))
+        w.ins = math.max(w.ins, display_width(item.ins or ""))
+        w.del = math.max(w.del, display_width(item.del or ""))
     end
 
     local items = {}
     for _, item in ipairs(raw_items) do
         table.insert(items, {
             rev = item.rev,
+            match_text = item.match_text,
             text = string.format(
                 "%s %s %s %s %s  %s",
                 pad_right(item.short, w.short),
@@ -334,6 +344,7 @@ local function jj_items(limit, revset, exclude_rev)
         )
         table.insert(items, {
             rev = item.rev,
+            match_text = item.revset_id .. " " .. item.desc,
             text = text,
             chunks = {
                 { item.icon .. " ", icon_hl },
@@ -393,8 +404,7 @@ local function load_items(vcs, opts, rev_filter, exclude_rev, include_staged)
     return jj_items(opts.limit, jj_revset, exclude_rev)
 end
 
--- the stock "select" layout caps at 100 columns / 10 rows, which truncates
--- subjects and hides most of the log; size to the content instead
+-- the stock "select" layout caps at 100 columns / 10 rows; size to content instead
 local function select_layout(items)
     local width = 0
     for _, item in ipairs(items) do
@@ -422,48 +432,28 @@ local function select_layout(items)
     }
 end
 
--- fuzzy stays on, but a literal hit outranks a fuzzy one and literal hits keep
--- their newest-first order instead of being re-ranked by score
-local ORDERED_MATCH = (function()
-    local terms = {}
+local LITERAL_SCORE = 1e6
 
-    local function is_literal(item)
-        if #terms == 0 then
-            return false
-        end
-        local text = (item.text or ""):lower()
-        for _, term in ipairs(terms) do
-            if not text:find(term, 1, true) then
-                return false
+-- fuzzy stays on, but a literal hit is pinned above every fuzzy one; the flat
+-- score leaves the sort's idx tiebreak to keep those hits newest-first
+local ORDERED_MATCH = {
+    matcher = {
+        on_match = function(matcher, item)
+            if matcher:empty() then
+                return
             end
-        end
-        return true
-    end
-
-    return {
-        filter = {
-            transform = function(_, filter)
-                terms = {}
-                for term in (filter.pattern or ""):lower():gmatch("%S+") do
-                    term = term:gsub("^['^]", ""):gsub("%$$", "")
-                    if term ~= "" and not vim.startswith(term, "!") then
-                        table.insert(terms, term)
-                    end
+            local text = (item.match_text or ""):lower()
+            for term in matcher.pattern:lower():gmatch("%S+") do
+                term = term:gsub("^['^]", ""):gsub("%$$", "")
+                if term ~= "" and not vim.startswith(term, "!") and not text:find(term, 1, true) then
+                    return
                 end
-            end,
-        },
-        sort = function(a, b)
-            local a_literal, b_literal = is_literal(a), is_literal(b)
-            if a_literal ~= b_literal then
-                return a_literal
             end
-            if not a_literal and a.score ~= b.score then
-                return a.score > b.score
-            end
-            return a.idx < b.idx
+            item.score = LITERAL_SCORE
         end,
-    }
-end)()
+    },
+    sort = { fields = { "score:desc", "idx" } },
+}
 
 local function open_picker(snacks, vcs, opts, items, title, on_select, jj_preview_revset)
     if vcs == "git" then
@@ -485,7 +475,7 @@ local function open_picker(snacks, vcs, opts, items, title, on_select, jj_previe
         snacks.picker.pick({
             title = title,
             items = items,
-            filter = ORDERED_MATCH.filter,
+            matcher = ORDERED_MATCH.matcher,
             sort = ORDERED_MATCH.sort,
             format = function(item)
                 if item.chunks then
