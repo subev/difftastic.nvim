@@ -422,12 +422,48 @@ local function select_layout(items)
     }
 end
 
--- typing should narrow the log, not re-rank it: substring matching only, and
--- matches keep their newest-first order
-local ORDERED_MATCH = {
-    matcher = { fuzzy = false },
-    sort = { fields = { "idx" } },
-}
+-- fuzzy stays on, but a literal hit outranks a fuzzy one and literal hits keep
+-- their newest-first order instead of being re-ranked by score
+local ORDERED_MATCH = (function()
+    local terms = {}
+
+    local function is_literal(item)
+        if #terms == 0 then
+            return false
+        end
+        local text = (item.text or ""):lower()
+        for _, term in ipairs(terms) do
+            if not text:find(term, 1, true) then
+                return false
+            end
+        end
+        return true
+    end
+
+    return {
+        filter = {
+            transform = function(_, filter)
+                terms = {}
+                for term in (filter.pattern or ""):lower():gmatch("%S+") do
+                    term = term:gsub("^['^]", ""):gsub("%$$", "")
+                    if term ~= "" and not vim.startswith(term, "!") then
+                        table.insert(terms, term)
+                    end
+                end
+            end,
+        },
+        sort = function(a, b)
+            local a_literal, b_literal = is_literal(a), is_literal(b)
+            if a_literal ~= b_literal then
+                return a_literal
+            end
+            if not a_literal and a.score ~= b.score then
+                return a.score > b.score
+            end
+            return a.idx < b.idx
+        end,
+    }
+end)()
 
 local function open_picker(snacks, vcs, opts, items, title, on_select, jj_preview_revset)
     if vcs == "git" then
@@ -449,7 +485,7 @@ local function open_picker(snacks, vcs, opts, items, title, on_select, jj_previe
         snacks.picker.pick({
             title = title,
             items = items,
-            matcher = ORDERED_MATCH.matcher,
+            filter = ORDERED_MATCH.filter,
             sort = ORDERED_MATCH.sort,
             format = function(item)
                 if item.chunks then
